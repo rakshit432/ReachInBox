@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+**/dist/
+build/
+*.tsbuildinfo
+
+# Environment variables (keep .env.example tracked)
+.env
+.env.local
+**/.env
+**/.env.local
+
+# Local database / runtime data
+backend/data/
+*.sqlite
+*.db
+
+# Logs & OS files
+npm-debug.log*
+.DS_Store
+Thumbs.db
+

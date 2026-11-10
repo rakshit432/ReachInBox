@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String          @id @default(uuid())
+  googleId         String          @unique @map("google_id")
+  email            String          @unique
+  name             String
+  avatarUrl        String          @map("avatar_url")
+  slackAccessToken String?         @map("slack_access_token")
+  slackWebhookUrl  String?         @map("slack_webhook_url")
+  slackChannelId   String?         @map("slack_channel_id")
+  slackTeamName    String?         @map("slack_team_name")
+  createdAt        DateTime        @default(now()) @map("created_at")
+
+  senderAccounts   SenderAccount[]
+  emailJobs        EmailJob[]
+
+  @@map("users")
+}
+
+model SenderAccount {
+  id          String     @id @default(uuid())
+  userId      String     @map("user_id")
+  email       String
+  name        String
+  smtpHost    String     @map("smtp_host")
+  smtpPort    Int        @map("smtp_port")
+  smtpUser    String     @map("smtp_user")
+  smtpPass    String     @map("smtp_pass")
+  hourlyLimit Int        @default(50) @map("hourly_limit")
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailJobs   EmailJob[]
+
+  @@index([userId])
+  @@map("sender_accounts")
+}
+
+model EmailJob {
+  id                   String    @id @default(uuid())
+  userId               String    @map("user_id")
+  senderId             String    @map("sender_id")
+  senderEmail          String    @map("sender_email")
+  recipientEmail       String    @map("recipient_email")
+  subject              String
+  body                 String
+  status               String    @default("SCHEDULED") // SCHEDULED | PROCESSING | RATE_LIMITED | SENT | FAILED
+  scheduledAt          DateTime  @map("scheduled_at")
+  sentAt               DateTime? @map("sent_at")
+  delayBetweenEmailsMs Int       @default(2000) @map("delay_between_emails_ms")
+  hourlyLimit          Int       @default(50) @map("hourly_limit")
+  etherealMessageId    String?   @map("ethereal_message_id")
+  etherealPreviewUrl   String?   @map("ethereal_preview_url")
+  errorMessage         String?   @map("error_message")
+  retryCount           Int       @default(0) @map("retry_count")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sender               SenderAccount @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([status, scheduledAt])
+  @@map("email_jobs")
+}
+
+model RateLimitWindow {
+  windowKey     String   @id @map("window_key")
+  senderId      String   @map("sender_id")
+  hourBucket    String   @map("hour_bucket")
+  count         Int      @default(0)
+  slackNotified Boolean  @default(false) @map("slack_notified")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([senderId, hourBucket])
+  @@map("rate_limit_windows")
+}
+
