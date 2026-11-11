@@ -8,8 +8,17 @@ import {
   User,
 } from '../types';
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api';
+const rawEnvUrl = (
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_URL ||
+  'http://localhost:4000/api'
+)
+  .trim()
+  .replace(/\/+$/, '');
+
+const API_BASE_URL = rawEnvUrl.endsWith('/api')
+  ? rawEnvUrl
+  : `${rawEnvUrl}/api`;
 
 async function request<T>(
   endpoint: string,

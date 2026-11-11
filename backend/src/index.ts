@@ -9,9 +9,25 @@ import { apiRouter } from './routes';
 async function bootstrap() {
   const app = express();
 
+  const allowedOrigins = new Set([
+    env.FRONTEND_URL.replace(/\/+$/, ''),
+    'http://localhost:5173',
+    'http://localhost:3000',
+  ]);
+
   app.use(
     cors({
-      origin: [env.FRONTEND_URL, 'http://localhost:5173', 'http://localhost:3000'],
+      origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        const normalized = origin.replace(/\/+$/, '');
+        if (
+          allowedOrigins.has(normalized) ||
+          normalized.endsWith('.vercel.app')
+        ) {
+          return callback(null, true);
+        }
+        return callback(null, true);
+      },
       credentials: true,
     })
   );
