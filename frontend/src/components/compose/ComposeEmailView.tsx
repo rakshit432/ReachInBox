@@ -312,8 +312,19 @@ export const ComposeEmailView: React.FC<ComposeEmailViewProps> = ({
                 </Button>
                 <Button
                   size="sm"
-                  variant="outline-green"
-                  onClick={() => setShowSendLaterPopover(false)}
+                  variant="primary"
+                  isLoading={isSubmitting}
+                  onClick={() => {
+                    const pendingFromInput =
+                      extractEmailsFromText(recipientInput);
+                    const hasRecipients =
+                      recipients.length > 0 || pendingFromInput.length > 0;
+                    if (hasRecipients && subject.trim() && body.trim()) {
+                      handleSubmit();
+                    } else {
+                      setShowSendLaterPopover(false);
+                    }
+                  }}
                 >
                   Done
                 </Button>
