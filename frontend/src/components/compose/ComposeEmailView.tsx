@@ -52,13 +52,17 @@ export const ComposeEmailView: React.FC<ComposeEmailViewProps> = ({
     senders[0]?.hourlyLimit || 50
   );
 
-  // Default start time: 15 seconds in the future so live scheduling is easy to demo
-  const [startTimeIso, setStartTimeIso] = useState<string>(() => {
-    const d = new Date(Date.now() + 15_000);
-    return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+  const toLocalDateTimeInput = (date: Date): string => {
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
       .toISOString()
-      .slice(0, 16);
-  });
+      .slice(0, 19);
+  };
+
+  // Default start time: empty (Send Immediately) until user picks a Send Later time
+  const [startTimeIso, setStartTimeIso] = useState<string>('');
+  const [selectedPresetLabel, setSelectedPresetLabel] = useState<string | null>(
+    null
+  );
 
   const [showSendLaterPopover, setShowSendLaterPopover] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -92,18 +96,18 @@ export const ComposeEmailView: React.FC<ComposeEmailViewProps> = ({
     setRecipients((prev) => prev.filter((item) => item !== emailToRemove));
   };
 
-  const applyQuickTimePreset = (offsetMs: number) => {
+  const [presetOffsetMs, setPresetOffsetMs] = useState<number | null>(null);
+
+  const applyQuickTimePreset = (offsetMs: number, label: string) => {
     const target = new Date(Date.now() + offsetMs);
-    const localFormatted = new Date(
-      target.getTime() - target.getTimezoneOffset() * 60000
-    )
-      .toISOString()
-      .slice(0, 16);
-    setStartTimeIso(localFormatted);
+    setStartTimeIso(toLocalDateTimeInput(target));
+    setPresetOffsetMs(offsetMs);
+    setSelectedPresetLabel(label);
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (overrideStartTimeIso?: string) => {
     setFormError(null);
+    setShowSendLaterPopover(false);
 
     // Include any typed email still sitting in the text box
     const pendingFromInput = extractEmailsFromText(recipientInput);
@@ -128,9 +132,16 @@ export const ComposeEmailView: React.FC<ComposeEmailViewProps> = ({
 
     setIsSubmitting(true);
     try {
-      const targetStartDate = startTimeIso
-        ? new Date(startTimeIso).toISOString()
-        : new Date().toISOString();
+      let targetStartDate: string;
+      if (overrideStartTimeIso) {
+        targetStartDate = new Date(overrideStartTimeIso).toISOString();
+      } else if (presetOffsetMs !== null) {
+        targetStartDate = new Date(Date.now() + presetOffsetMs).toISOString();
+      } else if (startTimeIso) {
+        targetStartDate = new Date(startTimeIso).toISOString();
+      } else {
+        targetStartDate = new Date().toISOString();
+      }
 
       await onScheduleSubmit({
         senderId: selectedSenderId || senders[0]?.id,
@@ -194,15 +205,25 @@ export const ComposeEmailView: React.FC<ComposeEmailViewProps> = ({
             variant="outline-green"
             onClick={() => setShowSendLaterPopover((prev) => !prev)}
           >
-            Send Later
+            {selectedPresetLabel
+              ? `Send Later (${selectedPresetLabel})`
+              : startTimeIso
+              ? `Send Later (${new Date(startTimeIso).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                })})`
+              : 'Send Later'}
           </Button>
 
           <Button
             variant="primary"
-            onClick={handleSubmit}
+            onClick={() => handleSubmit()}
             isLoading={isSubmitting}
           >
-            Schedule ({recipients.length || 0})
+            {startTimeIso || presetOffsetMs
+              ? `Schedule (${recipients.length || 0})`
+              : `Send (${recipients.length || 0})`}
           </Button>
 
           {/* Send Later Modal (Uses Reusable Modal Component) */}
@@ -214,53 +235,80 @@ export const ComposeEmailView: React.FC<ComposeEmailViewProps> = ({
           >
             <div>
               <label className="block text-xs text-gray-500 mb-1.5">
-                Pick date & time
+                Pick date & time (with seconds)
               </label>
               <input
                 type="datetime-local"
+                step="1"
                 value={startTimeIso}
-                onChange={(e) => setStartTimeIso(e.target.value)}
+                onChange={(e) => {
+                  setStartTimeIso(e.target.value);
+                  setPresetOffsetMs(null);
+                  setSelectedPresetLabel(null);
+                }}
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-800 mb-3 focus:border-[#00A63E] focus:outline-none"
               />
 
               <div className="space-y-1 border-t border-gray-100 pt-2 mb-4 text-xs">
-                <button
-                  type="button"
-                  onClick={() => applyQuickTimePreset(15 * 1000)}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 cursor-pointer"
-                >
-                  In 15 seconds (Quick Demo Test)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyQuickTimePreset(60 * 1000)}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 cursor-pointer"
-                >
-                  In 1 minute (Server Restart Demo)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyQuickTimePreset(3600 * 1000)}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 cursor-pointer"
-                >
-                  In 1 hour
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyQuickTimePreset(24 * 3600 * 1000)}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 cursor-pointer"
-                >
-                  Tomorrow, same time
-                </button>
+                {[
+                  {
+                    offset: 15 * 1000,
+                    label: 'In 15 sec',
+                    desc: 'In 15 seconds (Quick Demo Test)',
+                  },
+                  {
+                    offset: 60 * 1000,
+                    label: 'In 1 min',
+                    desc: 'In 1 minute (Server Restart Demo)',
+                  },
+                  {
+                    offset: 2 * 60 * 1000,
+                    label: 'In 2 min',
+                    desc: 'In 2 minutes',
+                  },
+                  {
+                    offset: 3600 * 1000,
+                    label: 'In 1 hr',
+                    desc: 'In 1 hour',
+                  },
+                  {
+                    offset: 24 * 3600 * 1000,
+                    label: 'Tomorrow',
+                    desc: 'Tomorrow, same time',
+                  },
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() =>
+                      applyQuickTimePreset(preset.offset, preset.label)
+                    }
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors flex items-center justify-between ${
+                      selectedPresetLabel === preset.label
+                        ? 'bg-emerald-50 text-[#00A63E] font-semibold border border-[#00A63E]/30'
+                        : 'hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    <span>{preset.desc}</span>
+                    {selectedPresetLabel === preset.label && (
+                      <span className="text-[11px] text-[#00A63E]">✓</span>
+                    )}
+                  </button>
+                ))}
               </div>
 
               <div className="flex justify-end gap-2">
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => setShowSendLaterPopover(false)}
+                  onClick={() => {
+                    setStartTimeIso('');
+                    setPresetOffsetMs(null);
+                    setSelectedPresetLabel(null);
+                    setShowSendLaterPopover(false);
+                  }}
                 >
-                  Cancel
+                  Clear
                 </Button>
                 <Button
                   size="sm"
@@ -433,8 +481,13 @@ export const ComposeEmailView: React.FC<ComposeEmailViewProps> = ({
             <span className="font-medium text-gray-700">Start Time</span>
             <input
               type="datetime-local"
+              step="1"
               value={startTimeIso}
-              onChange={(e) => setStartTimeIso(e.target.value)}
+              onChange={(e) => {
+                setStartTimeIso(e.target.value);
+                setPresetOffsetMs(null);
+                setSelectedPresetLabel(null);
+              }}
               className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-800 focus:border-[#00A63E] focus:outline-none"
             />
           </div>
